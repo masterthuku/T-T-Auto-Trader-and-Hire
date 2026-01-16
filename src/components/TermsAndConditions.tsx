@@ -24,7 +24,7 @@ export default function TermsAndConditions() {
           <li><strong>Renter</strong> – Person(s) named in the Rental Agreement authorized to drive.</li>
         </ul>
 
-        <h2 className="text-2xl font-semibold mt-10 mb-4">3. Rental Charges</h2>
+        <h2 className="text-2xl font-semibold mt-10 mb-4">3. Rental Charges & Conditions</h2>
         <p>You agree to pay:</p>
         <ul className="list-disc pl-6 space-y-2">
           <li>Daily/weekly rental rate as stated</li>
@@ -37,6 +37,9 @@ export default function TermsAndConditions() {
           <li>Traffic violation fines + KSh 2,000 administration fee per violation</li>
         </ul>
         <p className="mt-4">All rates subject to 16% VAT unless stated otherwise.</p>
+        <p>
+            Hirer shall be at least 21 years of age, and must produce evidence of 3 years drivers experience, and current and valid licence for both the harer and the alternative driver.
+        </p>
 
         <h2 className="text-2xl font-semibold mt-10 mb-4">7. Return of Vehicle</h2>
         <ul className="list-disc pl-6 space-y-2">
