@@ -38,7 +38,7 @@ export default function TermsAndConditions() {
         </ul>
         <p className="mt-4">All rates subject to 16% VAT unless stated otherwise.</p>
         <p>
-            Hirer shall be at least 21 years of age, and must produce evidence of 3 years drivers experience, and current and valid licence for both the harer and the alternative driver.
+            Hirer shall be at least 21 years of age, and must produce evidence of 3 years drivers experience, and current and valid licence for both the hirer and the alternative driver.
         </p>
 
         <h2 className="text-2xl font-semibold mt-10 mb-4">7. Return of Vehicle</h2>
