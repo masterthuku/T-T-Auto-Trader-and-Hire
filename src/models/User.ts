@@ -7,12 +7,12 @@ export interface IUser extends Document {
   organizationName?: string;
   phone: string;
   email: string;
-  dob: Date;
+  dob?: Date;
   licenseNumber: string;
-  licenseFrontUrl: string; // ImageKit URL
-  licenseExpiration: Date;
-  idType?: string;
-  idNumber?: string;
+  licenseFrontUrl: string;
+  licenseExpiration?: Date;
+  idType: string;          // ← Now required
+  idNumber: string;        // ← Now required
   idFrontUrl?: string;
   idBackUrl?: string;
   photoUrl?: string;
@@ -29,11 +29,19 @@ const UserSchema: Schema = new Schema({
   phone: { type: String, required: true },
   email: { type: String, required: true },
   dob: { type: Date },
-  licenseNumber: { type: String },
-  licenseFrontUrl: { type: String },
+  licenseNumber: { type: String, required: true },
+  licenseFrontUrl: { type: String, required: true },
   licenseExpiration: { type: Date },
-  idType: { type: String },
-  idNumber: { type: String },
+  idType: {
+    type: String,
+    required: [true, 'ID Type is required'],
+    enum: ['national_id', 'passport', 'alien_id', 'military_id'], // Optional: restrict to valid values
+  },
+  idNumber: {
+    type: String,
+    required: [true, 'ID Number is required'],
+    trim: true,
+  },
   idFrontUrl: { type: String },
   idBackUrl: { type: String },
   photoUrl: { type: String },
