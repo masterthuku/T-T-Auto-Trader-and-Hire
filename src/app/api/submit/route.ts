@@ -12,6 +12,10 @@ const imagekit = new ImageKit({
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+export const bodyParser = false;
+
+// Max file size (adjust as needed - 20MB is safe for memory)
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +23,6 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
 
-    // Text fields
     const getField = (name: string) => formData.get(name)?.toString() ?? undefined;
 
     const isCorporate = getField('isCorporate') === 'true';
@@ -35,38 +38,42 @@ export async function POST(request: NextRequest) {
     const workAddress = getField('workAddress');
     const kraPin = getField('kraPin');
 
-    // Dates
-    const dobYear = getField('dobYear');
-    const dobMonth = getField('dobMonth');
-    const dobDay = getField('dobDay');
-    const dob = dobYear && dobMonth && dobDay
-      ? new Date(`${dobYear}-${dobMonth}-${dobDay}`)
+    const dob = getField('dobYear') && getField('dobMonth') && getField('dobDay')
+      ? new Date(`${getField('dobYear')}-${getField('dobMonth')}-${getField('dobDay')}`)
       : undefined;
 
-    const expYear = getField('expYear');
-    const expMonth = getField('expMonth');
-    const expDay = getField('expDay');
-    const licenseExpiration = expYear && expMonth && expDay
-      ? new Date(`${expYear}-${expMonth}-${expDay}`)
+    const licenseExpiration = getField('expYear') && getField('expMonth') && getField('expDay')
+      ? new Date(`${getField('expYear')}-${getField('expMonth')}-${getField('expDay')}`)
       : undefined;
 
-    // File handling
-    const fileToBuffer = async (file: File | null) => {
-      if (!file) return null;
-      const arrayBuffer = await file.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    };
+    // Safe buffer-based upload with size check
+    const uploadFile = async (file: File | null, prefix: string): Promise<string> => {
+      if (!file || file.size === 0) return '';
 
-    const uploadFile = async (file: File | null, fileNamePrefix: string) => {
-      const buffer = await fileToBuffer(file);
-      if (!buffer) return '';
+      // Prevent memory crash - reject large files
+      if (file.size > MAX_FILE_SIZE) {
+        console.warn(`File too large: ${file.name} (${file.size} bytes)`);
+        return '';
+      }
 
-      const extension = file?.name?.split('.').pop() || 'jpg';
-      const response = await imagekit.upload({
-        file: buffer,
-        fileName: `${fileNamePrefix}-${Date.now()}.${extension}`,
-      });
-      return response.url;
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const extension = file.name.split('.').pop() || 'jpg';
+        const fileName = `${prefix}-${Date.now()}.${extension}`;
+
+        const response = await imagekit.upload({
+          file: buffer,
+          fileName,
+          useUniqueFileName: true,
+        });
+
+        return response.url;
+      } catch (err) {
+        console.error(`Upload failed for ${file?.name || prefix}:`, err);
+        return '';
+      }
     };
 
     const [
