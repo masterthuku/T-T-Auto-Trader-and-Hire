@@ -49,7 +49,6 @@ export default function RegistrationForm() {
     idNumber: "",
     residentialAddress: "",
     workAddress: "",
-    kraPin: "",
   });
 
   const [dobPopoverOpen, setDobPopoverOpen] = useState(false);
@@ -305,7 +304,7 @@ export default function RegistrationForm() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email Address *</Label>
+                      <Label htmlFor="email">Email Address (optional)</Label>
                       <Input
                         id="email"
                         name="email"
@@ -709,7 +708,7 @@ export default function RegistrationForm() {
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="workAddress">Work / Office Address</Label>
+                      <Label htmlFor="workAddress">Work / Office Address (if applicable)</Label>
                       <Input
                         id="workAddress"
                         name="workAddress"
@@ -718,15 +717,7 @@ export default function RegistrationForm() {
                       />
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="kraPin">KRA PIN</Label>
-                      <Input
-                        id="kraPin"
-                        name="kraPin"
-                        value={formData.kraPin}
-                        onChange={handleInputChange}
-                      />
-                    </div>
+                    
                   </div>
                 </div>
 

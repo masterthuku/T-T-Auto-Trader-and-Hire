@@ -18,7 +18,6 @@ export interface IUser extends Document {
   photoUrl?: string;
   residentialAddress?: string;
   workAddress?: string;
-  kraPin?: string;
 }
 
 const UserSchema: Schema = new Schema({
@@ -27,7 +26,7 @@ const UserSchema: Schema = new Schema({
   lastName: { type: String },
   organizationName: { type: String },
   phone: { type: String, required: true },
-  email: { type: String, required: true },
+  email: { type: String, required: false },
   dob: { type: Date },
   licenseNumber: { type: String, required: true },
   licenseFrontUrl: { type: String, required: true },
@@ -46,8 +45,7 @@ const UserSchema: Schema = new Schema({
   idBackUrl: { type: String },
   photoUrl: { type: String },
   residentialAddress: { type: String },
-  workAddress: { type: String },
-  kraPin: { type: String },
+  workAddress: { type: String, required: false},
 }, { timestamps: true });
 
 export default mongoose.models.User || mongoose.model<IUser>('User', UserSchema);

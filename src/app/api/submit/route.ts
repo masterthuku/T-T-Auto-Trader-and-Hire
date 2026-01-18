@@ -36,7 +36,6 @@ export async function POST(request: NextRequest) {
     const idNumber = getField('idNumber');
     const residentialAddress = getField('residentialAddress');
     const workAddress = getField('workAddress');
-    const kraPin = getField('kraPin');
 
     const dob = getField('dobYear') && getField('dobMonth') && getField('dobDay')
       ? new Date(`${getField('dobYear')}-${getField('dobMonth')}-${getField('dobDay')}`)
@@ -106,7 +105,6 @@ export async function POST(request: NextRequest) {
       photoUrl,
       residentialAddress,
       workAddress,
-      kraPin,
     });
 
     await user.save();
