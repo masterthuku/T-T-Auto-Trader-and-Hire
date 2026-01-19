@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -34,7 +34,7 @@ export default function RegistrationForm() {
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
-  const [submitAttempted, setSubmitAttempted] = useState(false); // ← Controls error display
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -49,13 +49,38 @@ export default function RegistrationForm() {
     idNumber: "",
     residentialAddress: "",
     workAddress: "",
+    pickupDate: undefined as Date | undefined,
+    pickupTime: "" as string, // e.g. "14:30"
+    returnDate: undefined as Date | undefined,
+    returnTime: "" as string,
   });
 
   const [dobPopoverOpen, setDobPopoverOpen] = useState(false);
   const [licensePopoverOpen, setLicensePopoverOpen] = useState(false);
+  const [pickupPopoverOpen, setPickupPopoverOpen] = useState(false);
+  const [returnPopoverOpen, setReturnPopoverOpen] = useState(false);
+
+  const [availableCars, setAvailableCars] = useState<any[]>([]);
+  const [selectedCar, setSelectedCar] = useState<string>("");
 
   const isIndividual = clientType === "individual";
   const isCorporate = clientType === "corporate";
+
+  // Fetch available cars
+  useEffect(() => {
+    const fetchCars = async () => {
+      try {
+        const res = await fetch("/api/cars/available");
+        const data = await res.json();
+        if (data.success) {
+          setAvailableCars(data.cars);
+        }
+      } catch (err) {
+        console.error("Failed to load cars:", err);
+      }
+    };
+    fetchCars();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -66,22 +91,26 @@ export default function RegistrationForm() {
     e.preventDefault();
     setSubmitAttempted(true);
 
-    // Client-side validation (blocks submission if missing)
     const isValid =
       clientType &&
       formData.phone.trim() !== "" &&
       formData.email.trim() !== "" &&
       formData.residentialAddress.trim() !== "" &&
-      formData.idType.trim() !== "" && // ← Critical check
+      formData.idType.trim() !== "" &&
       formData.idNumber.trim() !== "" &&
       formData.licenseNumber.trim() !== "" &&
+      selectedCar.trim() !== "" &&
+      formData.pickupDate &&
+      formData.pickupTime &&
+      formData.returnDate &&
+      formData.returnTime &&
+      formData.pickupDate > new Date() &&
+      formData.returnDate > formData.pickupDate &&
       (isIndividual
         ? formData.firstName.trim() !== "" && formData.lastName.trim() !== ""
         : formData.organizationName.trim() !== "");
 
-    if (!isValid) {
-      return; // Show errors, don't submit
-    }
+    if (!isValid) return;
 
     setIsSubmitting(true);
     setSubmitStatus("idle");
@@ -89,16 +118,17 @@ export default function RegistrationForm() {
     try {
       const formDataToSend = new FormData(e.currentTarget as HTMLFormElement);
 
-      // Manually append state-managed fields that aren't in native inputs
-      formDataToSend.append("idType", formData.idType); // ← FIX: this was missing!
-      formDataToSend.append("idNumber", formData.idNumber); // ← Just in case
+      // Manually append state-managed fields
+      formDataToSend.append("idType", formData.idType);
+      formDataToSend.append("idNumber", formData.idNumber);
+      formDataToSend.append("selectedCar", selectedCar);
 
-      // Append dates (already doing this - good)
+      // Dates
       if (formData.dob) {
         formDataToSend.append("dobYear", formData.dob.getFullYear().toString());
         formDataToSend.append(
           "dobMonth",
-          (formData.dob.getMonth() + 1).toString()
+          (formData.dob.getMonth() + 1).toString(),
         );
         formDataToSend.append("dobDay", formData.dob.getDate().toString());
       }
@@ -106,16 +136,54 @@ export default function RegistrationForm() {
       if (formData.licenseExpiration) {
         formDataToSend.append(
           "expYear",
-          formData.licenseExpiration.getFullYear().toString()
+          formData.licenseExpiration.getFullYear().toString(),
         );
         formDataToSend.append(
           "expMonth",
-          (formData.licenseExpiration.getMonth() + 1).toString()
+          (formData.licenseExpiration.getMonth() + 1).toString(),
         );
         formDataToSend.append(
           "expDay",
-          formData.licenseExpiration.getDate().toString()
+          formData.licenseExpiration.getDate().toString(),
         );
+      }
+
+      // Pickup Date + Time
+      if (formData.pickupDate) {
+        formDataToSend.append(
+          "pickupYear",
+          formData.pickupDate.getFullYear().toString(),
+        );
+        formDataToSend.append(
+          "pickupMonth",
+          (formData.pickupDate.getMonth() + 1).toString(),
+        );
+        formDataToSend.append(
+          "pickupDay",
+          formData.pickupDate.getDate().toString(),
+        );
+      }
+      if (formData.pickupTime) {
+        formDataToSend.append("pickupTime", formData.pickupTime); // e.g. "14:30"
+      }
+
+      // Return Date + Time
+      if (formData.returnDate) {
+        formDataToSend.append(
+          "returnYear",
+          formData.returnDate.getFullYear().toString(),
+        );
+        formDataToSend.append(
+          "returnMonth",
+          (formData.returnDate.getMonth() + 1).toString(),
+        );
+        formDataToSend.append(
+          "returnDay",
+          formData.returnDate.getDate().toString(),
+        );
+      }
+      if (formData.returnTime) {
+        formDataToSend.append("returnTime", formData.returnTime);
       }
 
       formDataToSend.append("isCorporate", isCorporate.toString());
@@ -130,10 +198,18 @@ export default function RegistrationForm() {
         throw new Error(errorData.message || "Submission failed");
       }
 
+      // Mark car as Booked
+      await fetch(`/api/cars/${selectedCar}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Booked" }),
+      });
+
+      // Optimistic UI: Remove booked car from dropdown
+      setAvailableCars((prev) => prev.filter((car) => car._id !== selectedCar));
+
       setSubmitStatus("success");
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+      setTimeout(() => window.location.reload(), 1500);
     } catch (error: any) {
       console.error("Submission error:", error);
       setSubmitStatus("error");
@@ -142,7 +218,32 @@ export default function RegistrationForm() {
     }
   };
 
-  // Date helpers (unchanged)
+  // Fixed date helper
+  const updateDateYearMonth = (
+    currentDate: Date | undefined,
+    yearStr?: string,
+    monthStr?: string,
+  ): Date => {
+    const date = currentDate ? new Date(currentDate) : new Date();
+
+    if (yearStr !== undefined && yearStr !== "") {
+      date.setFullYear(Number(yearStr));
+    }
+
+    if (monthStr !== undefined && monthStr !== "") {
+      date.setMonth(Number(monthStr));
+    }
+
+    const lastDay = new Date(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      0,
+    ).getDate();
+    date.setDate(Math.min(date.getDate(), lastDay));
+
+    return date;
+  };
+
   const today = new Date();
   const currentYear = today.getFullYear();
 
@@ -163,17 +264,6 @@ export default function RegistrationForm() {
     "November",
     "December",
   ];
-
-  const updateDateYearMonth = (
-    currentDate: Date | undefined,
-    yearStr?: string,
-    monthStr?: string
-  ): Date => {
-    const date = currentDate ? new Date(currentDate) : new Date();
-    if (yearStr !== undefined) date.setFullYear(Number(yearStr));
-    if (monthStr !== undefined) date.setMonth(Number(monthStr));
-    return date;
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -222,9 +312,9 @@ export default function RegistrationForm() {
                 </Button>
               </div>
 
-              {!clientType && (
-                <p className="text-sm text-muted-foreground text-center">
-                  Please select client type to continue
+              {!clientType && submitAttempted && (
+                <p className="text-sm text-red-600 text-center">
+                  Please select client type
                 </p>
               )}
             </div>
@@ -251,7 +341,15 @@ export default function RegistrationForm() {
                             value={formData.firstName}
                             onChange={handleInputChange}
                             required
+                            className={cn(
+                              submitAttempted &&
+                                !formData.firstName &&
+                                "border-red-500",
+                            )}
                           />
+                          {submitAttempted && !formData.firstName && (
+                            <p className="text-xs text-red-600">Required</p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="lastName">Last Name *</Label>
@@ -261,7 +359,15 @@ export default function RegistrationForm() {
                             value={formData.lastName}
                             onChange={handleInputChange}
                             required
+                            className={cn(
+                              submitAttempted &&
+                                !formData.lastName &&
+                                "border-red-500",
+                            )}
                           />
+                          {submitAttempted && !formData.lastName && (
+                            <p className="text-xs text-red-600">Required</p>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -275,7 +381,15 @@ export default function RegistrationForm() {
                           value={formData.organizationName}
                           onChange={handleInputChange}
                           required
+                          className={cn(
+                            submitAttempted &&
+                              !formData.organizationName &&
+                              "border-red-500",
+                          )}
                         />
+                        {submitAttempted && !formData.organizationName && (
+                          <p className="text-xs text-red-600">Required</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -294,17 +408,27 @@ export default function RegistrationForm() {
                         <Input
                           id="phone"
                           name="phone"
-                          className="rounded-l-none"
+                          className={cn(
+                            "rounded-l-none",
+                            submitAttempted &&
+                              !formData.phone &&
+                              "border-red-500",
+                          )}
                           placeholder="7XX XXX XXX"
                           value={formData.phone}
                           onChange={handleInputChange}
                           required
                         />
                       </div>
+                      {submitAttempted && !formData.phone && (
+                        <p className="text-xs text-red-600">Required</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email Address (optional)</Label>
+                      <Label htmlFor="email">
+                        Email Address (Optional for individuals)
+                      </Label>
                       <Input
                         id="email"
                         name="email"
@@ -312,7 +436,15 @@ export default function RegistrationForm() {
                         value={formData.email}
                         onChange={handleInputChange}
                         required
+                        className={cn(
+                          submitAttempted &&
+                            !formData.email &&
+                            "border-red-500",
+                        )}
                       />
+                      {submitAttempted && !formData.email && (
+                        <p className="text-xs text-red-600">Required</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -320,9 +452,8 @@ export default function RegistrationForm() {
                 {/* Date of Birth */}
                 {isIndividual && (
                   <div className="space-y-6">
-                    <h3 className="text-lg font-semibold">Date of Birth</h3>
+                    <h3 className="text-lg font-semibold">Date of Birth *</h3>
                     <div className="space-y-2">
-                      <Label>Date of Birth *</Label>
                       <Popover
                         open={dobPopoverOpen}
                         onOpenChange={setDobPopoverOpen}
@@ -332,7 +463,7 @@ export default function RegistrationForm() {
                             variant="outline"
                             className={cn(
                               "w-full justify-start text-left font-normal",
-                              !formData.dob && "text-muted-foreground"
+                              !formData.dob && "text-muted-foreground",
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -347,7 +478,9 @@ export default function RegistrationForm() {
                           <div className="flex justify-between gap-4 mb-4 px-2">
                             <div className="w-32">
                               <Select
-                                value={formData.dob?.getFullYear().toString()}
+                                value={
+                                  formData.dob?.getFullYear().toString() ?? ""
+                                }
                                 onValueChange={(year) =>
                                   setFormData((prev) => ({
                                     ...prev,
@@ -370,14 +503,16 @@ export default function RegistrationForm() {
 
                             <div className="w-40">
                               <Select
-                                value={formData.dob?.getMonth().toString()}
+                                value={
+                                  formData.dob?.getMonth().toString() ?? ""
+                                }
                                 onValueChange={(month) =>
                                   setFormData((prev) => ({
                                     ...prev,
                                     dob: updateDateYearMonth(
                                       prev.dob,
                                       undefined,
-                                      month
+                                      month,
                                     ),
                                   }))
                                 }
@@ -410,7 +545,7 @@ export default function RegistrationForm() {
                                 dob: updateDateYearMonth(
                                   prev.dob,
                                   undefined,
-                                  newMonth.getMonth().toString()
+                                  newMonth.getMonth().toString(),
                                 ),
                               }))
                             }
@@ -443,7 +578,15 @@ export default function RegistrationForm() {
                         value={formData.licenseNumber}
                         onChange={handleInputChange}
                         required
+                        className={cn(
+                          submitAttempted &&
+                            !formData.licenseNumber &&
+                            "border-red-500",
+                        )}
                       />
+                      {submitAttempted && !formData.licenseNumber && (
+                        <p className="text-xs text-red-600">Required</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -457,7 +600,7 @@ export default function RegistrationForm() {
                           const file = e.target.files?.[0];
                           if (file && file.size > 20 * 1024 * 1024) {
                             alert("File too large! Maximum 20MB allowed.");
-                            e.target.value = ""; // Clear the input
+                            e.target.value = "";
                           }
                         }}
                       />
@@ -475,7 +618,7 @@ export default function RegistrationForm() {
                             className={cn(
                               "w-full justify-start text-left font-normal",
                               !formData.licenseExpiration &&
-                                "text-muted-foreground"
+                                "text-muted-foreground",
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -490,15 +633,17 @@ export default function RegistrationForm() {
                           <div className="flex justify-between gap-4 mb-4 px-2">
                             <div className="w-32">
                               <Select
-                                value={formData.licenseExpiration
-                                  ?.getFullYear()
-                                  .toString()}
+                                value={
+                                  formData.licenseExpiration
+                                    ?.getFullYear()
+                                    .toString() ?? ""
+                                }
                                 onValueChange={(year) =>
                                   setFormData((prev) => ({
                                     ...prev,
                                     licenseExpiration: updateDateYearMonth(
                                       prev.licenseExpiration,
-                                      year
+                                      year,
                                     ),
                                   }))
                                 }
@@ -518,16 +663,18 @@ export default function RegistrationForm() {
 
                             <div className="w-40">
                               <Select
-                                value={formData.licenseExpiration
-                                  ?.getMonth()
-                                  .toString()}
+                                value={
+                                  formData.licenseExpiration
+                                    ?.getMonth()
+                                    .toString() ?? ""
+                                }
                                 onValueChange={(month) =>
                                   setFormData((prev) => ({
                                     ...prev,
                                     licenseExpiration: updateDateYearMonth(
                                       prev.licenseExpiration,
                                       undefined,
-                                      month
+                                      month,
                                     ),
                                   }))
                                 }
@@ -563,7 +710,7 @@ export default function RegistrationForm() {
                                 licenseExpiration: updateDateYearMonth(
                                   prev.licenseExpiration,
                                   undefined,
-                                  newMonth.getMonth().toString()
+                                  newMonth.getMonth().toString(),
                                 ),
                               }))
                             }
@@ -576,13 +723,14 @@ export default function RegistrationForm() {
                   </div>
                 </div>
 
-                {/* KYC - ID Type & ID Number now enforced */}
+                {/* KYC + Vehicle + Pickup/Return Dates */}
                 <div className="space-y-6">
                   <h3 className="text-lg font-semibold">
-                    Additional Identification (KYC)
+                    Additional Identification (KYC), Vehicle & Rental Period
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* ID Type */}
                     <div className="space-y-2">
                       <Label>Type of ID *</Label>
                       <Select
@@ -596,7 +744,7 @@ export default function RegistrationForm() {
                           className={cn(
                             submitAttempted &&
                               !formData.idType &&
-                              "border-red-500 focus:ring-red-500"
+                              "border-red-500",
                           )}
                         >
                           <SelectValue placeholder="Select ID Type *" />
@@ -620,6 +768,7 @@ export default function RegistrationForm() {
                       )}
                     </div>
 
+                    {/* ID Number */}
                     <div className="space-y-2">
                       <Label htmlFor="idNumber">ID Number *</Label>
                       <Input
@@ -631,18 +780,191 @@ export default function RegistrationForm() {
                         className={cn(
                           submitAttempted &&
                             !formData.idNumber &&
-                            "border-red-500 focus:ring-red-500"
+                            "border-red-500",
                         )}
                       />
                       {submitAttempted && !formData.idNumber && (
+                        <p className="text-xs text-red-600">Required</p>
+                      )}
+                    </div>
+
+                    {/* Pickup Date + Time */}
+                    <div className="space-y-2">
+                      <Label>Pickup Date & Time *</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Popover
+                          open={pickupPopoverOpen}
+                          onOpenChange={setPickupPopoverOpen}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "justify-start text-left font-normal",
+                                !formData.pickupDate && "text-muted-foreground",
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {formData.pickupDate
+                                ? format(formData.pickupDate, "PPP")
+                                : "Date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-3" align="start">
+                            <DayPicker
+                              mode="single"
+                              selected={formData.pickupDate}
+                              onSelect={(date) => {
+                                if (date && date > new Date()) {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    pickupDate: date,
+                                  }));
+                                }
+                              }}
+                              month={formData.pickupDate ?? new Date()}
+                              disabled={{ before: new Date() }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+
+                        <Input
+                          type="time"
+                          value={formData.pickupTime}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              pickupTime: e.target.value,
+                            }))
+                          }
+                          required
+                          className={cn(
+                            submitAttempted &&
+                              !formData.pickupTime &&
+                              "border-red-500",
+                          )}
+                        />
+                      </div>
+                      {submitAttempted &&
+                        (!formData.pickupDate || !formData.pickupTime) && (
+                          <p className="text-sm text-red-600 mt-1">
+                            Pickup date & time required (future)
+                          </p>
+                        )}
+                    </div>
+
+                    {/* Return Date + Time */}
+                    <div className="space-y-2">
+                      <Label>Return Date & Time *</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Popover
+                          open={returnPopoverOpen}
+                          onOpenChange={setReturnPopoverOpen}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "justify-start text-left font-normal",
+                                !formData.returnDate && "text-muted-foreground",
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {formData.returnDate
+                                ? format(formData.returnDate, "PPP")
+                                : "Date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-3" align="start">
+                            <DayPicker
+                              mode="single"
+                              selected={formData.returnDate}
+                              onSelect={(date) => {
+                                if (
+                                  date &&
+                                  formData.pickupDate &&
+                                  date > formData.pickupDate
+                                ) {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    returnDate: date,
+                                  }));
+                                }
+                              }}
+                              month={formData.returnDate ?? new Date()}
+                              disabled={{
+                                before: formData.pickupDate ?? new Date(),
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+
+                        <Input
+                          type="time"
+                          value={formData.returnTime}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              returnTime: e.target.value,
+                            }))
+                          }
+                          required
+                          className={cn(
+                            submitAttempted &&
+                              !formData.returnTime &&
+                              "border-red-500",
+                          )}
+                        />
+                      </div>
+                      {submitAttempted &&
+                        (!formData.returnDate || !formData.returnTime) && (
+                          <p className="text-sm text-red-600 mt-1">
+                            Return date & time required (after pickup)
+                          </p>
+                        )}
+                    </div>
+
+                    {/* Vehicle Selection */}
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Vehicle to Hire *</Label>
+                      <Select
+                        value={selectedCar}
+                        onValueChange={setSelectedCar}
+                        required
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            submitAttempted && !selectedCar && "border-red-500",
+                          )}
+                        >
+                          <SelectValue placeholder="Select available vehicle *" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableCars.length === 0 ? (
+                            <SelectItem value="none" disabled>
+                              No vehicles available
+                            </SelectItem>
+                          ) : (
+                            availableCars.map((car) => (
+                              <SelectItem key={car._id} value={car._id}>
+                                {car.make} {car.modelName} ({car.year}) - KSh{" "}
+                                {car.dailyPrice}/day
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {submitAttempted && !selectedCar && (
                         <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
                           <AlertCircle className="h-4 w-4" />
-                          ID Number is required
+                          Please select a vehicle
                         </p>
                       )}
                     </div>
 
-                    {/* Other KYC fields */}
+                    {/* ID Front Image */}
                     <div className="space-y-2">
                       <Label>ID Front Image *</Label>
                       <Input
@@ -654,12 +976,13 @@ export default function RegistrationForm() {
                           const file = e.target.files?.[0];
                           if (file && file.size > 20 * 1024 * 1024) {
                             alert("File too large! Maximum 20MB allowed.");
-                            e.target.value = ""; // Clear the input
+                            e.target.value = "";
                           }
                         }}
                       />
                     </div>
 
+                    {/* ID Back Image */}
                     <div className="space-y-2">
                       <Label>ID Back Image</Label>
                       <Input
@@ -671,12 +994,13 @@ export default function RegistrationForm() {
                           const file = e.target.files?.[0];
                           if (file && file.size > 20 * 1024 * 1024) {
                             alert("File too large! Maximum 20MB allowed.");
-                            e.target.value = ""; // Clear the input
+                            e.target.value = "";
                           }
                         }}
                       />
                     </div>
 
+                    {/* Passport Size Photo */}
                     <div className="space-y-2">
                       <Label>Passport Size Photo *</Label>
                       <Input
@@ -688,12 +1012,13 @@ export default function RegistrationForm() {
                           const file = e.target.files?.[0];
                           if (file && file.size > 20 * 1024 * 1024) {
                             alert("File too large! Maximum 20MB allowed.");
-                            e.target.value = ""; // Clear the input
+                            e.target.value = "";
                           }
                         }}
                       />
                     </div>
 
+                    {/* Residential Address */}
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="residentialAddress">
                         Residential Address / Hotel Name *
@@ -704,11 +1029,22 @@ export default function RegistrationForm() {
                         value={formData.residentialAddress}
                         onChange={handleInputChange}
                         required
+                        className={cn(
+                          submitAttempted &&
+                            !formData.residentialAddress &&
+                            "border-red-500",
+                        )}
                       />
+                      {submitAttempted && !formData.residentialAddress && (
+                        <p className="text-xs text-red-600">Required</p>
+                      )}
                     </div>
 
+                    {/* Work Address */}
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="workAddress">Work / Office Address (if applicable)</Label>
+                      <Label htmlFor="workAddress">
+                        Work / Office Address (optional for individuals)
+                      </Label>
                       <Input
                         id="workAddress"
                         name="workAddress"
@@ -716,12 +1052,10 @@ export default function RegistrationForm() {
                         onChange={handleInputChange}
                       />
                     </div>
-
-                    
                   </div>
                 </div>
 
-                {/* Submit Section */}
+                {/* Submit */}
                 <div className="pt-8">
                   <Button
                     type="submit"
@@ -735,13 +1069,13 @@ export default function RegistrationForm() {
                         Processing...
                       </>
                     ) : (
-                      "Submit Registration"
+                      "Submit Registration & Book Vehicle"
                     )}
                   </Button>
 
                   {submitStatus === "success" && (
                     <p className="mt-4 text-center text-green-600 font-medium">
-                      Registration submitted successfully!
+                      Registration & booking submitted successfully!
                     </p>
                   )}
                   {submitStatus === "error" && (
